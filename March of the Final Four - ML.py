@@ -76,40 +76,47 @@ class NPC:
         self.piece_lower = 0; self.piece_upper = 1 # initial row numbers of the computer's pieces 
         
     def make_move(self):
-        columns = temp = self.mind.process(mff.board.table, 0.5) # feedong forward
+        columns = temp = self.mind.process(mff.board.table, 0.5) # feeding forward
         x_coord = columns.index(max(columns)) # choosing the column the compute likes the most
-        y_coord = y_temp =  randint(self.piece_lower, self.piece_upper) % mff.board.length # a random y coordinate is chosen
+        y_coord = randint(self.piece_lower, self.piece_upper) % mff.board.length # a random y coordinate is chosen
         moved = False
         while not moved:
-            test = 0
-            print("Testing:", (x_coord,y_coord))
-            try:
-                if mff.board.table[(int(y_coord) + 1) % mff.board.length][int(x_coord)] == 0 and (mff.board.table[int(y_coord)][int(x_coord)] not in  [0, mff.player_piece]):
-                    mff.board.move_piece((int(x_coord), int(y_coord)), turn = 'computer')
-                    self.mind.back_prop(0.5) # making the computer learn from its decision
-                    self.piece_upper += 1 #increasing the upper limit of the y coordinate by 1
-                    moved = True
-                else:
-                    # trying to avoid the computer's confusion
-                    grid = neighbourhood((x_coord,y_coord))
-                    for place in grid:
-                        if  mff.board.table[place[1]][place[0]] == mff.computer_piece:
-                            value = mff.board.move_piece((int(x_coord), int(y_coord)), turn = 'computer')
-                            moved = True if value == None else False
-                            break
-                    if moved == False:
-                        x_coord -= 1 if x_coord not in [0, mff.board.length - 1] else 0
-                        y_coord -= 1 if y_coord not in [0, mff.board.length - 2] else 0
-            except IndexError:
-                pass
+            if mff.board.table[(int(y_coord) + 1) % mff.board.length][int(x_coord)] == 0 and (mff.board.table[int(y_coord)][int(x_coord)] not in  [0, mff.player_piece]):
+                mff.board.move_piece((int(x_coord), int(y_coord)), turn = 'computer')
+                self.mind.back_prop(0.5) # making the computer learn from its decision
+                self.piece_upper += 1 #increasing the upper limit of the y coordinate by 1
+                moved = True
+            else:
+                # trying to avoid the computer's confusion
+                grid = neighbourhood((x_coord,y_coord)) # taking the 3 x 3 grid around that set of coordinates
+                # gonna check through all the squares in the  3 x 3 grid in the following code
+                for place in grid:
+                    x_coord = place[1]
+                    y_coord = place[0]
+                    print("Tested:", (x_coord,y_coord), end = ';')
+                    if  mff.board.table[place[1]][place[0]] == mff.computer_piece and mff.board.table[(place[1] + 1) % mff.board.length][place[0]] not in  [0, mff.player_piece]:
+                        value = mff.board.move_piece((place[0],place[1]), turn = 'computer') # it moves the piece if it ever feels that it's all right to move it forward
+                        moved = True if value == None else False # ensuring that the loop can be safely broken  
+                        break
+                if not moved:
+                    x_coord += (-1)**(2 if x_coord in [0,mff.board.length-1] else 1)
+                    y_coord += (-1)**(2 if x_coord in [0,mff.board.length-1] else 1)
+                    
+            
                 
-            print("I moved:", (x_coord,y_coord)) # msg
 
 
-npc = NPC()
+npc = NPC() # creating the NPC
+
+## Sample gamplay
+## The following gameplay will be a bit smooth in the beginning but turns into a confusion later
+
 while True:
-    player_mv = eval(input("Enter your move:"))
-    if mff.board.move_piece(player_mv) == None:
+    # infinite loop here till errors occur
+    player_mv = eval(input("Enter your move:")) # waiting for the player's move
+    value = mff.board.move_piece(player_mv)
+    # next we check if the player's move was valid
+    if value == None: 
         print(mff.board)
         npc.make_move()
         print(mff.board)

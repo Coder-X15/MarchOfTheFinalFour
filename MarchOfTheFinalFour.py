@@ -1,3 +1,5 @@
+# MarchOfThFinalFour.py
+
 from time import *
 
 # 'March of The Final Four' - a clone of chess
@@ -13,6 +15,7 @@ class PlayTable:
 
     def __repr__(self):
         '''prints the table'''
+        print()
         table_str = ''
         num = 0
         for row in self.table:
@@ -35,12 +38,13 @@ class PlayTable:
             self.table[row] = [0]*self.length
     def move_piece(self, coord, turn = 'player'):
         '''moves the piece at coord '''
-        if self.table[coord[1]][coord[0]] != 0 and self.table[coord[1] + (1 if turn == 'computer' else -1)][coord[0]] != 0:
+        if self.table[coord[1]][coord[0]] != 0 and self.table[coord[1] + (1 if turn == 'computer' else -1)][coord[0]] == 0:
             temp = self.table[coord[1]][coord[0]]
             self.table[coord[1]][coord[0]] = 0
             direction = 1 if turn == 'computer' else -1
             self.table[coord[1]+direction][coord[0]] = temp
-        elif self.table[coord[1]][coord[0]] == 0 or self.table[coord[1] + (-1)**(1 if turn == 'player' else 0)][coord[0]] != 0:
+            print(f"Moved {temp} from {(coord[0],coord[1])}") # msg
+        elif self.table[coord[1]][coord[0]] == 0 or self.table[coord[1] + (-1)**(1 if turn == 'player' else 1)][coord[0]] != 0:
             return 'invalid move'
         
         
