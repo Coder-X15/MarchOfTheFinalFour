@@ -1,12 +1,17 @@
 from math import *
 from random import *
 import MarchOfTheFinalFour as mff
+#####################
+## March Of The Final Four - Sample Gameplay (not all rules coded)
+
 
 ######################
 ##Bug fixes required:
 
-##1. The machine player has to somehow adjust its moves in case errors come up as well as when the move it chooses turns invalid
+##No issues
 
+######################
+## Solutions : at the dooorstep, it seems... 
 ######################
 
 ## Math functions for our use in here
@@ -24,47 +29,82 @@ def sig(x):
 
 ## Neighbourhood search
 
-def neighbourhood(coords):
+def neighbourhood(coords, board_length):
     '''generates the 3 x 3 grid that forms the neighbourhod of the required square'''
     axial_neighbours =  [(coords[0] + 1, coords[1]),(coords[0] - 1, coords[1]),
                         (coords[0], coords[1] + 1), (coords[0], coords[1] - 1)] # neighbours along NEWS directins
     diagonal_neighbours = [(coords[0] + 1, coords[1]+1),(coords[0] - 1, coords[1] - 1),
                            (coords[0]-1, coords[1] + 1), (coords[0]+1, coords[1] - 1)] #diagonal neighbours
-    neighbours = axial_neighbours + diagonal_neighbours
+    neighbours = axial_neighbours + diagonal_neighbours # supposed neighbours
+    ## purging those coordinates with negative values in them:
+    for i in range(len(neighbours)):
+        if (neighbours[i][0] < 0 or neighbours[i][0] > board_length - 1) or (neighbours[i][1] < 0 or neighbours[i][1] > board_length - 1):
+            neighbours[i] = 0
+    while 0 in neighbours:
+        neighbours.remove(0)
+    
     return neighbours
 
 ########################
-
 # The NPC's brain
 
 class NPC_Brain:
     '''brain of the NPC ;), actually a single-layer perceptron '''
     def __init__(self,board_size):
         ''' Initialiser'''
-        self.inputs = board_size # no. of input nodes for the neural network
-        self.weights = [random() for i in range(self.inputs)] # random weights for each game
-        self.column_scores = [] # column scores (for each column) - the 'liking' of the computer to move a piece in a column as the output
-                                # of the neural network's processing 
+        self.inputs =  3 # no. of input nodes for the neural network
+        self.board_size = board_size # side length of the board 
+        #self.weights = [random() for i in range(self.inputs)] random weights for each game
+        self.weights = [random() for i in range(self.inputs)]
         self.inputs_template = [] # a container to hold the inputs to the neural network
-    def process(self, board, threshold):
+        self.scores = []
+        
+    def process(self, board):
         '''forward-feeding'''
         # we begin by setting the lists to zero so as to make the computer forget the past state of the board and to look for the current state
-        self.inputs_template = [] 
-        self.column_scores = []
-        self.row_scores = []
-        for column in range(self.inputs):
-            scores = [1 if row[column] == mff.player_piece else 0 for row in board] # checking for enemies in each column
-            self.inputs_template.append(scores) 
-            score = sig(multiply(scores, self.weights)/threshold) # using the logistic sigmoid function to generate a liking for columns :D
-            self.column_scores.append(score) # each column score is appended
-        return self.column_scores
-    def back_prop(self, learning_rate, target = 1):
+        self.inputs_template = []
+        self.scores = []
+        for i in range(self.board_size):
+            column = []
+            inputs_set = []
+            for j in range(self.board_size):
+                column.append(board[j][i]) # generating a column
+            # now we check for features to score this column with
+            # inputs order : [are_pieces_adjacent, proximity/8, enemy_index/8]
+            if column.count(mff.computer_piece) == 2:
+                # (case - 1: checking for two computer pieces)
+                # checking for proximity between computer pieces   
+                indices = []
+                for piece in range(len(column)):
+                    if column[piece] == mff.computer_piece:
+                        indices.append(piece)
+                    if column[piece] == mff.player_piece:
+                        # checking for enemy pieces
+                        indices.append(-piece)
+                if indices[1] - indices[0] == 0:
+                    inputs_set.append(0)
+                else:
+                    inputs_set.append(1)
+                inputs_set.append((indices[1] - indices[0])/8) #proximity between computer pieces / 8
+                if indices[len(indices)-1] < 0:
+                    while indices[0]>0:
+                        indices.pop(0)
+                    inputs_set.append(fsum(indices)/(len(indices)*8)) # enemy piece index / 8
+                self.inputs_template.append(inputs_set)
+            self.scores.append(sig(multiply(inputs_set, self.weights)))
+        return self.scores 
+            
+                
+                
+                
+            
+    
+    def back_prop(self, learning_rate, target = 0):
         '''Back-propagation, with error function as squared-error function (target - error)**2'''
-        for row in self.inputs_template:
+        for j in range(len(self.inputs_template)):
             for i in range(self.inputs):
                 '''overfitting can occur, but still let's try this'''
-                self.weights[i] -= learning_rate * 2 * (self.column_scores[i] - target) * (self.column_scores[i]*(1-self.column_scores[i])) * row[i] #backprop formula
-        print("Model has been trained") # a msg to make sure all's fine here
+                self.weights[i] += -learning_rate * 2 * (self.scores[j] - target) * ((self.scores[j]**2)*(1-self.scores[j])) * self.inputs_template[j][i] #backprop formula
                 
     
         
@@ -73,35 +113,44 @@ class NPC:
     ''' non-playable character / computerized player class '''
     def __init__(self):
         self.mind = NPC_Brain(mff.board.length) # the model
-        self.piece_lower = 0; self.piece_upper = 1 # initial row numbers of the computer's pieces 
+        self.piece_lower = 0; self.piece_upper = 1 # initial row numbers of the computer's pieces
+        self.row_expanse = 2
         
     def make_move(self):
-        columns = temp = self.mind.process(mff.board.table, 0.5) # feeding forward
-        x_coord = columns.index(max(columns)) # choosing the column the compute likes the most
-        y_coord = randint(self.piece_lower, self.piece_upper) % mff.board.length # a random y coordinate is chosen
         moved = False
+        req_target = -1
+        counter = 1
+        print("Thinking...")
+        scores = []
         while not moved:
-            if mff.board.table[(int(y_coord) + 1) % mff.board.length][int(x_coord)] == 0 and (mff.board.table[int(y_coord)][int(x_coord)] not in  [0, mff.player_piece]):
-                mff.board.move_piece((int(x_coord), int(y_coord)), turn = 'computer')
-                self.mind.back_prop(0.5) # making the computer learn from its decision
-                self.piece_upper += 1 #increasing the upper limit of the y coordinate by 1
-                moved = True
+            scores = self.mind.process(mff.board.table)
+            if counter < 50:
+                x_coord = scores.index(max(scores))
             else:
+                scores.pop(scores.index(max(scores)))
+                x_coord = scores.index(max(scores))
+            y_coord = randint(0, self.row_expanse)
+            try:
+                if mff.board.table[int(y_coord) + 1][int(x_coord)] == 0 and (mff.board.table[int(y_coord)][int(x_coord)] not in  [0, mff.player_piece]):
+                    mff.board.move_piece((int(x_coord), int(y_coord)), turn = 'computer')
+                    self.piece_upper += 1 #increasing the upper limit of the y coordinate by 1
+                    moved = True
+                    self.row_expanse += 1
+                    print("Move made after ",counter,"iterations")
+##                    self.mind.back_prop(0.686574, target = req_target)
+                    counter = 1
+            except mff.InvalidMove:
                 # trying to avoid the computer's confusion
-                grid = neighbourhood((x_coord,y_coord)) # taking the 3 x 3 grid around that set of coordinates
-                # gonna check through all the squares in the  3 x 3 grid in the following code
-                for place in grid:
-                    x_coord = place[1]
-                    y_coord = place[0]
-                    print("Tested:", (x_coord,y_coord), end = ';')
-                    if  mff.board.table[place[1]][place[0]] == mff.computer_piece and mff.board.table[(place[1] + 1) % mff.board.length][place[0]] not in  [0, mff.player_piece]:
-                        value = mff.board.move_piece((place[0],place[1]), turn = 'computer') # it moves the piece if it ever feels that it's all right to move it forward
-                        moved = True if value == None else False # ensuring that the loop can be safely broken  
-                        break
-                if not moved:
-                    x_coord += (-1)**(2 if x_coord in [0,mff.board.length-1] else 1)
-                    y_coord += (-1)**(2 if x_coord in [0,mff.board.length-1] else 1)
+                slef.row_expanse -= 1 
+                counter += 1
+            except IndexError:
+                self.row_expanse -= 1
+                counter += 1
+            if counter >= 100:
+                self.mind.train(0.5,target = req_target)
                     
+            
+                
             
                 
 
@@ -110,18 +159,21 @@ npc = NPC() # creating the NPC
 
 ## Sample gamplay
 ## The following gameplay will be a bit smooth in the beginning but turns into a confusion later
-
+all_gone_good = True
 while True:
+    all_gone_good = True 
     # infinite loop here till errors occur
     player_mv = eval(input("Enter your move:")) # waiting for the player's move
-    value = mff.board.move_piece(player_mv)
+    try:
+        mff.board.move_piece(player_mv)
+    except mff.InvalidMove:
+        print("Invalid move")
+        all_gone_good = False
     # next we check if the player's move was valid
-    if value == None: 
+    if all_gone_good:
         print(mff.board)
         npc.make_move()
         print(mff.board)
-    else:
-        print("Invalid move")
         
     
     
